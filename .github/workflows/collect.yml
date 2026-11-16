@@ -1,0 +1,38 @@
+name: Preise erfassen
+
+on:
+  schedule:
+    # Alle 15 Minuten, Zeiten in UTC. GitHub startet geplante Laeufe oft verspaetet.
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preis abfragen
+        env:
+          JITTER_MAX_S: "30"
+        run: python3 collector.py
+
+      - name: Aenderung committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/prices.csv 2>/dev/null || exit 0
+          if git diff --cached --quiet; then
+            echo "Nichts zu committen"
+          else
+            git commit -m "Preisupdate $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
