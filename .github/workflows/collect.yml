@@ -2,8 +2,10 @@ name: Preise erfassen
 
 on:
   schedule:
-    # Alle 15 Minuten, Zeiten in UTC. GitHub startet geplante Laeufe oft verspaetet.
-    - cron: "7,22,37,52 * * * *"
+    # Alle 15 Minuten von 04:00 bis 23:59 UTC. Das deckt 06:00 bis 24:00 deutscher Zeit
+    # in Sommer- und Winterzeit ab. Die genaue Ruhezeit prueft collector.py (QUIET_HOURS).
+    # GitHub startet geplante Laeufe oft verspaetet.
+    - cron: "7,22,37,52 4-23 * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,6 +25,11 @@ jobs:
       - name: Preis abfragen
         env:
           JITTER_MAX_S: "30"
+          QUIET_HOURS: "0-6"
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DIESEL_ALERT_BELOW: ${{ vars.DIESEL_ALERT_BELOW }}
+          NOTIFY_DIESEL_CHANGE: ${{ vars.NOTIFY_DIESEL_CHANGE }}
+          PAGE_LINK: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: python3 collector.py
 
       - name: Aenderung committen

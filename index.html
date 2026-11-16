@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diesel JET Mainz, Wormser Str. 135</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --page:           #f4f4f2;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #75746f;
+    --grid:           #e6e5e1;
+    --axis:           #c9c8c2;
+    --series-1:       #2a78d6;
+    --series-1-soft:  rgba(42, 120, 214, 0.10);
+    --button-active:  #0b0b0b;
+    --button-active-text: #fcfcfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      color-scheme: dark;
+      --page:           #111110;
+      --surface-1:      #1a1a19;
+      --text-primary:   #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #9a998f;
+      --grid:           #2c2c2a;
+      --axis:           #44443f;
+      --series-1:       #3987e5;
+      --series-1-soft:  rgba(57, 135, 229, 0.16);
+      --button-active:  #f0efec;
+      --button-active-text: #1a1a19;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .viz-root {
+    min-height: 100vh; background: var(--page); color: var(--text-primary);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 16px 40px;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
+  .card { background: var(--surface-1); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .hero { display: flex; flex-wrap: wrap; gap: 8px 40px; align-items: flex-end; }
+  .hero-label { font-size: 13px; color: var(--text-secondary); }
+  .hero-value { font-size: 44px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.05;
+                font-variant-numeric: tabular-nums; }
+  .hero-value sup { font-size: 0.5em; vertical-align: 0.75em; margin-left: 1px; }
+  .meta { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .meta div { margin-top: 2px; }
+  .stats { display: flex; gap: 28px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary);
+           font-variant-numeric: tabular-nums; margin: 4px 0 12px; }
+  .stats b { color: var(--text-primary); font-weight: 600; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filters button {
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--axis); background: transparent; color: var(--text-primary);
+  }
+  .filters button[aria-pressed="true"] {
+    background: var(--button-active); color: var(--button-active-text); border-color: var(--button-active);
+  }
+  .chart-wrap { position: relative; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+  .tick text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tick line { stroke: var(--grid); stroke-width: 1; }
+  .baseline { stroke: var(--axis); stroke-width: 1; }
+  .line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .area { fill: var(--series-1-soft); stroke: none; }
+  .now-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .cross { stroke: var(--text-muted); stroke-width: 1; }
+  .hover-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--axis); border-radius: 8px; padding: 6px 10px; font-size: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12); white-space: nowrap; display: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .tooltip b { font-size: 14px; }
+  .tooltip span { color: var(--text-secondary); }
+  .empty { color: var(--text-secondary); font-size: 14px; padding: 40px 0; text-align: center; }
+  details { font-size: 13px; }
+  summary { cursor: pointer; color: var(--text-secondary); }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  .note { font-size: 12px; color: var(--text-muted); margin-top: 16px; }
+  .note a { color: inherit; }
+  .error { color: var(--text-primary); }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<main>
+  <h1>Diesel, JET Mainz, Wormser Str. 135</h1>
+  <p class="sub">Preisverlauf aus den eigenen Messungen</p>
+
+  <section class="card hero" aria-live="polite">
+    <div>
+      <div class="hero-label">Aktueller Dieselpreis</div>
+      <div class="hero-value" id="current">...</div>
+    </div>
+    <div class="meta">
+      <div id="stand"></div>
+      <div id="fetched"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="filters" role="group" aria-label="Zeitraum">
+      <button type="button" data-range="1">24 Std.</button>
+      <button type="button" data-range="7" aria-pressed="true">7 Tage</button>
+      <button type="button" data-range="30">30 Tage</button>
+      <button type="button" data-range="0">Alles</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="chart-wrap" id="chart-wrap">
+      <svg id="chart" viewBox="0 0 800 300" role="img" aria-label="Verlauf des Dieselpreises"></svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Preisänderungen als Tabelle</summary>
+      <table>
+        <thead><tr><th>Gültig ab</th><th class="num">Diesel</th></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </details>
+  </section>
+
+  <p class="note">
+    Gemessen wird alle 15 Minuten von 6 bis 24 Uhr. Änderungen in der Nacht erscheinen mit ihrer
+    Uhrzeit laut jet.de, sobald morgens wieder gemessen wird. Die Linie nach der letzten Änderung
+    setzt voraus, dass der Preis seitdem gleich geblieben ist.
+    Quelle: <a href="https://www.jet.de/tankstellen/mainz/wormser-str-135">jet.de</a>,
+    Rohdaten: <a href="data/prices.csv">prices.csv</a>.
+  </p>
+</main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var CSV_URL = "data/prices.csv";
+  var TZ = "Europe/Berlin";
+  var W = 800, H = 300, M = { top: 12, right: 16, bottom: 28, left: 48 };
+  var DAY = 86400000;
+
+  var fmtDateTime = new Intl.DateTimeFormat("de-DE", {
+    timeZone: TZ, weekday: "short", day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit"
+  });
+  var fmtFull = new Intl.DateTimeFormat("de-DE", {
+    timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+  var fmtDay = new Intl.DateTimeFormat("de-DE", { timeZone: TZ, day: "2-digit", month: "2-digit" });
+  var fmtHour = new Intl.DateTimeFormat("de-DE", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+
+  var points = [];       // { t: Date, price: Number }, eine Zeile pro Aenderung
+  var lastFetched = null;
+  var rangeDays = 7;
+
+  function el(id) { return document.getElementById(id); }
+
+  function euro(value) {
+    return value.toFixed(3).replace(".", ",") + " €";
+  }
+
+  function heroHtml(value) {
+    var s = value.toFixed(3).replace(".", ",");
+    return s.slice(0, -1) + "<sup>" + s.slice(-1) + "</sup> €";
+  }
+
+  function parseCsv(text) {
+    var lines = text.replace(/\r/g, "").split("\n").filter(function (l) { return l.trim() !== ""; });
+    if (lines.length < 2) return [];
+    var head = lines[0].split(",");
+    return lines.slice(1).map(function (line) {
+      var cells = line.split(",");
+      var row = {};
+      head.forEach(function (key, i) { row[key] = cells[i] || ""; });
+      return row;
+    });
+  }
+
+  // Zeitpunkt der Aenderung: "Stand der Preise", sonst Abfragezeit.
+  function changeTime(row) {
+    var fetched = new Date(row.fetched_utc);
+    var stand = new Date(row.price_stand);
+    if (!isNaN(stand) && (isNaN(fetched) || stand <= fetched)) return stand;
+    return fetched;
+  }
+
+  function buildPoints(rows) {
+    var out = [];
+    rows.forEach(function (row) {
+      var price = parseFloat(row.diesel);
+      if (isNaN(price)) return;
+      var t = changeTime(row);
+      if (isNaN(t)) return;
+      var prev = out[out.length - 1];
+      if (prev && prev.price === price) return;       // nur Diesel-Aenderungen
+      if (prev && t < prev.t) t = prev.t;             // Reihenfolge absichern
+      out.push({ t: t, price: price });
+    });
+    return out;
+  }
+
+  function priceAt(time) {
+    var value = null;
+    for (var i = 0; i < points.length; i++) {
+      if (points[i].t <= time) value = points[i]; else break;
+    }
+    return value;
+  }
+
+  function niceStep(span) {
+    var raw = span / 4;
+    var steps = [0.005, 0.01, 0.02, 0.025, 0.05, 0.1, 0.2, 0.25, 0.5];
+    for (var i = 0; i < steps.length; i++) if (steps[i] >= raw) return steps[i];
+    return 1;
+  }
+
+  function svgEl(name, attrs, parent) {
+    var node = document.createElementNS("http://www.w3.org/2000/svg", name);
+    Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+
+  function render() {
+    var svg = el("chart");
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    W = Math.max(300, Math.round(el("chart-wrap").clientWidth || 800));
+    H = W < 520 ? 230 : 300;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    el("tooltip").style.display = "none";
+
+    if (!points.length) {
+      el("stats").textContent = "";
+      var t = svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "tick" }, svg);
+      t.textContent = "Noch keine Messwerte";
+      return;
+    }
+
+    var now = new Date();
+    var end = now;
+    var start = rangeDays ? new Date(now - rangeDays * DAY) : points[0].t;
+    if (start >= end) start = new Date(end - DAY);
+
+    // Sichtbare Stufen: Preis zu Beginn des Fensters, dann alle Aenderungen darin.
+    var first = priceAt(start);
+    var visible = [];
+    if (first) visible.push({ t: start, price: first.price });
+    points.forEach(function (p) { if (p.t > start && p.t <= end) visible.push(p); });
+    if (!visible.length) {
+      el("stats").textContent = "Keine Messwerte in diesem Zeitraum";
+      return;
+    }
+    var dataStart = visible[0].t;
+
+    var prices = visible.map(function (p) { return p.price; });
+    var min = Math.min.apply(null, prices), max = Math.max.apply(null, prices);
+    el("stats").innerHTML =
+      "<span>Tief <b>" + euro(min) + "</b></span>" +
+      "<span>Hoch <b>" + euro(max) + "</b></span>" +
+      "<span>Änderungen <b>" + Math.max(visible.length - 1, 0) + "</b></span>";
+
+    var pad = Math.max((max - min) * 0.15, 0.01);
+    var step = niceStep(max - min + 2 * pad);
+    var yMin = Math.floor((min - pad) / step) * step;
+    var yMax = Math.ceil((max + pad) / step) * step;
+
+    var x0 = dataStart.getTime(), x1 = end.getTime();
+    function x(t) { return M.left + (t - x0) / (x1 - x0) * (W - M.left - M.right); }
+    function y(v) { return M.top + (yMax - v) / (yMax - yMin) * (H - M.top - M.bottom); }
+
+    // Y-Achse mit Gitter
+    var yAxis = svgEl("g", {}, svg);
+    for (var v = yMin; v <= yMax + 1e-9; v += step) {
+      var g = svgEl("g", { class: "tick" }, yAxis);
+      svgEl("line", { x1: M.left, x2: W - M.right, y1: y(v), y2: y(v) }, g);
+      var label = svgEl("text", { x: M.left - 8, y: y(v) + 4, "text-anchor": "end" }, g);
+      label.textContent = v.toFixed(Math.round(step * 1000) % 10 ? 3 : 2).replace(".", ",");
+    }
+
+    // X-Achse
+    var spanDays = (x1 - x0) / DAY;
+    var tickCount = W < 520 ? 3 : 6;
+    var xAxis = svgEl("g", {}, svg);
+    svgEl("line", { class: "baseline", x1: M.left, x2: W - M.right,
+                    y1: H - M.bottom, y2: H - M.bottom }, xAxis);
+    for (var i = 0; i <= tickCount; i++) {
+      var tt = new Date(x0 + (x1 - x0) * i / tickCount);
+      var tx = svgEl("text", { x: x(tt.getTime()), y: H - M.bottom + 18,
+                               "text-anchor": i === 0 ? "start" : (i === tickCount ? "end" : "middle"),
+                               class: "tick" }, xAxis);
+      tx.setAttribute("style", "fill: var(--text-muted); font-size: 11px");
+      tx.textContent = spanDays <= 2 ? fmtHour.format(tt) : fmtDay.format(tt);
+    }
+
+    // Stufenlinie: ein Preis gilt bis zur naechsten Aenderung
+    var d = "", area = "";
+    visible.forEach(function (p, idx) {
+      var px = x(p.t.getTime()), py = y(p.price);
+      if (idx === 0) d = "M" + px + "," + py;
+      else d += "H" + px + "V" + py;
+    });
+    d += "H" + x(end.getTime());
+    area = d + "V" + y(yMin) + "H" + x(x0) + "Z";
+    svgEl("path", { class: "area", d: area }, svg);
+    svgEl("path", { class: "line", d: d }, svg);
+    var last = visible[visible.length - 1];
+    svgEl("circle", { class: "now-dot", cx: x(end.getTime()), cy: y(last.price), r: 4.5 }, svg);
+
+    // Hover: Fadenkreuz und Tooltip
+    var cross = svgEl("line", { class: "cross", y1: M.top, y2: H - M.bottom, style: "display:none" }, svg);
+    var dot = svgEl("circle", { class: "hover-dot", r: 5, style: "display:none" }, svg);
+    var hit = svgEl("rect", { x: M.left, y: 0, width: W - M.left - M.right, height: H,
+                              fill: "transparent" }, svg);
+    var tip = el("tooltip"), wrap = el("chart-wrap");
+
+    function show(evt) {
+      var rect = svg.getBoundingClientRect();
+      var clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      var sx = (clientX - rect.left) / rect.width * W;
+      sx = Math.max(M.left, Math.min(W - M.right, sx));
+      var t = x0 + (sx - M.left) / (W - M.left - M.right) * (x1 - x0);
+      var p = priceAt(new Date(t));
+      if (!p) return;
+      var since = p.t < dataStart ? dataStart : p.t;
+      cross.setAttribute("x1", sx); cross.setAttribute("x2", sx); cross.style.display = "";
+      dot.setAttribute("cx", sx); dot.setAttribute("cy", y(p.price)); dot.style.display = "";
+      tip.innerHTML = "<b>" + euro(p.price) + "</b><br><span>" + fmtDateTime.format(new Date(t)) +
+                      "</span><br><span>gültig seit " + fmtFull.format(p.t) + "</span>";
+      tip.style.display = "block";
+      var scale = rect.width / W;
+      var left = sx * scale + 12;
+      if (left + tip.offsetWidth > wrap.clientWidth) left = sx * scale - tip.offsetWidth - 12;
+      tip.style.left = left + "px";
+      tip.style.top = Math.max(0, y(p.price) * scale - tip.offsetHeight - 10) + "px";
+    }
+    function hide() { cross.style.display = "none"; dot.style.display = "none"; tip.style.display = "none"; }
+    hit.addEventListener("mousemove", show);
+    hit.addEventListener("touchstart", show, { passive: true });
+    hit.addEventListener("touchmove", show, { passive: true });
+    hit.addEventListener("mouseleave", hide);
+  }
+
+  function renderSummary() {
+    if (!points.length) { el("current").textContent = "keine Daten"; return; }
+    var last = points[points.length - 1];
+    el("current").innerHTML = heroHtml(last.price);
+    el("stand").textContent = "Gültig seit " + fmtFull.format(last.t) + " Uhr";
+    el("fetched").textContent = lastFetched
+      ? "Letzte Änderung erfasst " + fmtFull.format(lastFetched) + " Uhr" : "";
+
+    var body = el("table-body");
+    body.innerHTML = "";
+    points.slice().reverse().forEach(function (p) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + fmtFull.format(p.t) + "</td><td class=\"num\">" + euro(p.price) + "</td>";
+      body.appendChild(tr);
+    });
+  }
+
+  document.querySelectorAll(".filters button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".filters button").forEach(function (b) {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      rangeDays = Number(btn.getAttribute("data-range"));
+      render();
+    });
+  });
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 150);
+  });
+
+  fetch(CSV_URL + "?v=" + Date.now(), { cache: "no-store" })
+    .then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.text();
+    })
+    .then(function (text) {
+      var rows = parseCsv(text);
+      points = buildPoints(rows);
+      var fetchedTimes = rows.map(function (r) { return new Date(r.fetched_utc); })
+                             .filter(function (t) { return !isNaN(t); });
+      lastFetched = fetchedTimes.length ? fetchedTimes[fetchedTimes.length - 1] : null;
+      renderSummary();
+      render();
+    })
+    .catch(function (err) {
+      el("current").textContent = "Fehler";
+      el("stand").innerHTML = "<span class=\"error\">Daten konnten nicht geladen werden (" +
+                              String(err.message).replace(/</g, "&lt;") + ")</span>";
+    });
+})();
+</script>
+</body>
+</html>

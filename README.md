@@ -2,18 +2,32 @@
 
 Preistracker für eine einzelne Tankstelle: JET, Wormser Str. 135, Mainz.
 
-Ein GitHub-Actions-Workflow liest alle 15 Minuten die Preise von jet.de.
+Ein GitHub-Actions-Workflow liest von 6 bis 24 Uhr alle 15 Minuten die Preise von jet.de.
 Ändert sich ein Preis oder der Preisstand, wird eine Zeile an `data/prices.csv` angehängt und committet.
-Es sind weder API-Key noch Secrets nötig.
+Optional kommt eine Push-Nachricht über ntfy. Die Seite `index.html` zeigt den Dieselverlauf über GitHub Pages.
 
 ## Dateien
 
 | Datei | Zweck |
 |---|---|
-| `collector.py` | Abruf, Parser und Speicherung, nur Standardbibliothek |
+| `collector.py` | Abruf, Parser, Speicherung und Push, nur Standardbibliothek |
 | `test_collector.py` | Tests ohne Netzwerkzugriff |
-| `.github/workflows/collect.yml` | geplanter Lauf alle 15 Minuten |
-| `data/prices.csv` | Messdaten, entsteht beim ersten Lauf |
+| `index.html` | Seite mit aktuellem Preis und Verlaufsdiagramm |
+| `.nojekyll` | GitHub Pages liefert die Dateien unverändert aus |
+| `.github/workflows/collect.yml` | geplanter Lauf |
+| `data/prices.csv` | Messdaten |
+
+## Einstellungen im Repository
+
+Unter Settings, Secrets and variables, Actions:
+
+| Name | Art | Beispiel | Wirkung |
+|---|---|---|---|
+| `NTFY_TOPIC` | Secret | `tankagent-3f9c1a7e5b2d4c60` | ntfy-Thema; ohne dieses Secret wird nichts gesendet |
+| `DIESEL_ALERT_BELOW` | Variable | `1.999` | Nachricht, sobald Diesel unter diesen Wert fällt |
+| `NOTIFY_DIESEL_CHANGE` | Variable | `true` | Nachricht bei jeder Änderung des Dieselpreises |
+
+Die Ruhezeit steht im Workflow als `QUIET_HOURS: "0-6"` (deutsche Ortszeit).
 
 ## Datenquelle
 
@@ -22,14 +36,11 @@ Es sind weder API-Key noch Secrets nötig.
    Er ist nicht dokumentiert und kann sich ohne Ankündigung ändern.
 2. Fallback: die Stationsseite `https://www.jet.de/tankstellen/mainz/wormser-str-135`.
 
-Beide enthalten dieselben Element-IDs, zum Beispiel `product_price_fuel_diesel` und `product_price_timestamp_fuel`.
-Der Stationscode `31e1ff9c20` steht auf der Seite im Attribut `data-station`.
-
 ## Datenformat
 
 ~~~
 fetched_utc,price_stand,diesel,super,super_e10,super_plus,source
-2026-11-16T21:41:10Z,2026-11-16T20:13:00+01:00,2.119,1.879,1.819,1.989,api
+2026-11-16T21:57:40Z,2026-11-16T20:13:00+01:00,2.119,1.879,1.819,1.989,api
 ~~~
 
 - `fetched_utc`: Zeitpunkt der Abfrage in UTC
@@ -41,10 +52,9 @@ fetched_utc,price_stand,diesel,super,super_e10,super_plus,source
 ## Grenzen der Messung
 
 - Ändert JET die Seitenstruktur, bricht der Parser. Der Workflow schlägt dann fehl, und GitHub meldet das per E-Mail.
-- Preisphasen, die kürzer als das Abfrageintervall sind, können fehlen.
+- Preisphasen, die kürzer als das Abfrageintervall sind, können fehlen. Zwischen 0 und 6 Uhr wird nicht gemessen.
 - Fällt der Workflow aus, entsteht eine Lücke, die in der CSV wie ein konstanter Preis aussieht.
-  Die Laufhistorie unter Actions zeigt, ob in einem Zeitraum gemessen wurde.
-- Was die Seite außerhalb der Öffnungszeiten anzeigt, ist noch nicht beobachtet.
+- Das Diagramm setzt den Zeitpunkt einer Änderung auf `price_stand`, sonst auf `fetched_utc`.
 
 ## Lokal ausführen
 

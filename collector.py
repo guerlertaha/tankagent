@@ -11,6 +11,15 @@ Optionale Umgebungsvariablen:
   JET_PAGE_URL      URL der Stationsseite
   CSV_PATH          Zieldatei, Standard: data/prices.csv
   JITTER_MAX_S      zufaellige Wartezeit vor der Abfrage in Sekunden, Standard: 0
+  QUIET_HOURS       Ruhezeit in deutscher Ortszeit, z.B. "0-6", Standard: keine
+
+Push-Benachrichtigung ueber ntfy (alles optional):
+  NTFY_TOPIC            Name des ntfy-Themas, ohne ihn wird nichts gesendet
+  NTFY_SERVER           Standard: https://ntfy.sh
+  DIESEL_ALERT_BELOW    Schwelle in Euro, z.B. "1.999"; Nachricht, sobald
+                        Diesel darunter faellt
+  NOTIFY_DIESEL_CHANGE  "true": Nachricht bei jeder Aenderung des Dieselpreises
+  PAGE_LINK             Link, der beim Antippen der Nachricht geoeffnet wird
 
 Nur Standardbibliothek, keine Abhaengigkeiten.
 """
@@ -199,11 +208,91 @@ def append_row(path: Path, row: dict) -> None:
         writer.writerow(row)
 
 
+def in_quiet_hours(spec: str, now: datetime) -> bool:
+    """spec "0-6" bedeutet 00:00 bis 05:59 deutscher Ortszeit."""
+    spec = spec.strip()
+    if not spec:
+        return False
+    start, end = (int(part) for part in spec.split("-"))
+    hour = now.astimezone(STATION_TZ).hour
+    if start <= end:
+        return start <= hour < end
+    return hour >= start or hour < end  # z.B. "22-6"
+
+
+def to_float(value):
+    try:
+        return float(value) if value not in (None, "") else None
+    except ValueError:
+        return None
+
+
+def euro(value: float) -> str:
+    return f"{value:.3f}".replace(".", ",") + " €"
+
+
+def build_notification(last_row, new_row: dict, threshold, every_change: bool):
+    """Gibt (Titel, Text, Prioritaet) zurueck oder None, wenn nichts zu melden ist."""
+    if last_row is None:
+        return None
+    old = to_float(last_row.get("diesel"))
+    new = to_float(new_row.get("diesel"))
+    if new is None or old is None or old == new:
+        return None
+    direction = "gesunken" if new < old else "gestiegen"
+    text = f"Diesel {euro(old)} → {euro(new)} ({direction})"
+    crossed = threshold is not None and new < threshold <= old
+    if crossed:
+        return (f"Diesel unter {euro(threshold)}", text, 4)
+    if every_change:
+        return (f"Diesel {direction}", text, 3)
+    return None
+
+
+def send_ntfy(server: str, topic: str, title: str, message: str,
+              priority: int, click: str) -> None:
+    payload = {"topic": topic, "title": title, "message": message,
+               "priority": priority, "tags": ["fuelpump"]}
+    if click:
+        payload["click"] = click
+    request = urllib.request.Request(
+        server.rstrip("/") + "/",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        response.read()
+
+
+def notify(last_row, new_row: dict) -> None:
+    """Sendet bei Bedarf eine Push-Nachricht. Fehler brechen den Lauf nicht ab."""
+    topic = os.environ.get("NTFY_TOPIC", "").strip()
+    if not topic:
+        return
+    threshold = to_float(os.environ.get("DIESEL_ALERT_BELOW", "").strip().replace(",", "."))
+    every_change = os.environ.get("NOTIFY_DIESEL_CHANGE", "").strip().lower() == "true"
+    result = build_notification(last_row, new_row, threshold, every_change)
+    if result is None:
+        return
+    title, message, priority = result
+    try:
+        send_ntfy(os.environ.get("NTFY_SERVER", "").strip() or "https://ntfy.sh",
+                  topic, title, message, priority, os.environ.get("PAGE_LINK", "").strip())
+        print(f"Benachrichtigung gesendet: {title}")
+    except (urllib.error.URLError, TimeoutError) as err:
+        print(f"WARNUNG: Benachrichtigung fehlgeschlagen ({err})", file=sys.stderr)
+
+
 def main() -> int:
     code = os.environ.get("JET_STATION_CODE", "").strip() or STATION_CODE
     page_url = os.environ.get("JET_PAGE_URL", "").strip() or PAGE_URL
     csv_path = Path(os.environ.get("CSV_PATH", "data/prices.csv"))
     jitter = float(os.environ.get("JITTER_MAX_S", "0") or 0)
+
+    if in_quiet_hours(os.environ.get("QUIET_HOURS", ""), datetime.now(timezone.utc)):
+        print("Ruhezeit, keine Abfrage")
+        return 0
 
     if jitter > 0:
         time.sleep(random.uniform(0, jitter))
@@ -217,9 +306,11 @@ def main() -> int:
     new_row["fetched_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     summary = ", ".join(f"{key}={new_row[key] or '-'}" for key in COMPARE)
 
-    if has_changed(read_last_row(csv_path), new_row):
+    last_row = read_last_row(csv_path)
+    if has_changed(last_row, new_row):
         append_row(csv_path, new_row)
         print(f"Aenderung gespeichert ({new_row['source']}): {summary}")
+        notify(last_row, new_row)
     else:
         print(f"Keine Aenderung ({new_row['source']}): {summary}")
     return 0
